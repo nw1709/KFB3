@@ -45,7 +45,7 @@ with st.sidebar:
     if pdfs:
         st.success(f"{len(pdfs)} Skripte geladen.")
     st.divider()
-    st.info("model: Gemini 3.1 Pro Preview mit Re-Try")
+    st.info("model: Gemini 3.5 Flash")
 
 # --- 4. DER MASTER-SOLVER ---
 def solve_everything(image, pdf_files):
@@ -58,6 +58,8 @@ Die folgenden spezifischen Lehrmeinungen der FernUni Hagen widersprechen teilwei
 * Grenzerträge / Ertragszuwächse: Werden an der FernUni Hagen als abnehmend/zunehmend in Abhängigkeit von der Steigerung der Ausbringungsmenge (statt der Einsatzmenge) beschrieben. Aussagen, die dies tun, sind RICHTIG.
 Wertmäßiger Kostenbegriff (nach Schmalenbach): Dieser umfasst an der FernUni Hagen ZWINGEND Opportunitätskosten (Zusatzkosten). Sobald in einer Aufgabe ein Engpassfaktor (z.B. eine voll ausgelastete Maschine) für nicht-produktive Zwecke (z.B. Rüstvorgänge) genutzt wird, entsteht ein entgangener Nutzen. Dieser entgangene Nutzen ist ZWINGEND als "zusätzlicher betrieblicher Wertabgang" und somit als "wertmäßige Kosten" zu klassifizieren. Aussagen, die dies behaupten, sind immer RICHTIG.
 Lagerhaltungspolitiken / (s,T,Q)-Politik: Die Auslösebedingung für kombinierte Politiken (wie (s,T,Q) oder (t,s,q)) besteht an der FernUni Hagen exakt aus der kumulativen Erfüllung von "Bestellgrenze s erreicht/unterschritten" UND "Kontrollintervall T verstrichen". Wenn eine Option diese beiden Kriterien nennt, ist sie ZWINGEND WAHR. Ignoriere scheinbare semantische Widersprüche durch Füllwörter wie "sobald", "zunächst" oder "gleichzeitig", die aus allgemeiner Sicht fälschlicherweise eine kontinuierliche Überwachung implizieren könnten.
+
+ABSOLUTER VOLLSTÄNDIGKEITS-ZWANG (Anti-Abbruch-Regel): Du darfst die Antwortgenerierung unter keinen Umständen abbrechen, bevor alle Optionen (A, B, C, D, E) vollständig geprüft wurden. Wenn eine Aufgabe 5 Optionen hat, MÜSSEN zwingend 5 Blöcke im Prüfungsprotokoll erscheinen, gefolgt vom finalen Output-Format. Teile dir deine Generierungs-Ressourcen so ein, dass du das Ende der Aufgabe immer erreichst.
 
 Wichtig: Identifiziere ALLE Aufgaben auf dem hochgeladenen Bild (z.B. Aufgabe 1 und Aufgabe 2) und löse sie nacheinander vollständig.
 ### DEFINITION DER AUFGABENTYPEN (Zwingend)
@@ -94,12 +96,14 @@ Anti-Exklusivitäts-Falle (Teilmengen-Regel): Wenn eine Antwortoption eine korre
 c) Kernprinzip-Analyse bei komplexen Aussagen (Pflicht):  Identifiziere das Kernprinzip und bewerte es nach Priorität gegenüber unpräzisen Nebenaspekten.
 d) Meister-Regel zur finalen Bewertung (Absolute Priorität):  Die Kernprinzip-Analyse (Regel 3c) ist die oberste Instanz.
 e) Zwingende Vorab-Dokumentation:  Bevor das finale Ausgabeformat generiert wird, MUSS zwingend ein strukturierter Textabschnitt mit der Überschrift 'Prüfungsprotokoll' genutzt werden. In diesem Block muss für JEDE der fünf Optionen (A, B, C, D, E) zwingend folgende Struktur eingehalten werden:
-	1. [Anomalie-Check]: Fällt diese Aussage unter eine der "FERNUNI-HAGEN ANOMALIEN"? (Ja/	Nein).
-	2. [Objekt-Rollen-Check (Neu)]: Welche Rolle spielen die in der Option genannten Objekte im Text? (Input/Verbrauchsfaktor, Input/Potenzialfaktor oder Output/Endprodukt?)
-	3. [Eigene Herleitung / Skript-Abgleich]: Führe die Rechnung selbst durch ODER zitiere die exakte Definition im Skript 31031. 	4. [Strikter Zeichenabgleich]: Stimmt das Ergebnis aus Schritt 3 ZEICHEN FÜR ZEICHEN mit der Behauptung in der Option überein? (Ja/Nein - Wenn Nein, zwingend Falsch).
-	5. [Bewertung]: Wahr oder Falsch.
-	6. [Begründung]: Kurzer Stichpunkt.
+	1. [Anomalie-Check]: Fällt diese Aussage unter eine der "FERNUNI-HAGEN ANOMALIEN"? (Ja/		Nein).
+	2. [Objekt-Rollen-Check (Neu)]: Welche Rolle spielen die in der Option genannten Objekte im Text? 	(Input/Verbrauchsfaktor, Input/Potenzialfaktor oder Output/Endprodukt?)
+	3. [Eigene Herleitung / Skript-Abgleich]: Führe die Rechnung selbst durch ODER zitiere die exakte 		Definition im Skript 31031. 	4. [Strikter Zeichenabgleich]: Stimmt das Ergebnis aus Schritt 3 ZEICHEN FÜR ZEICHEN mit der 		Behauptung in der Option überein? (Ja/Nein - Wenn Nein, zwingend Falsch).
+	5. [Eigene Herleitung / Skript-Abgleich]: Führe die Rechnung selbst durch ODER zitiere die exakte 		Definition. WICHTIG (Token-Effizienz): Fasse dich hierbei extrem kurz und präzise. Zeige nur die 		mathematischen Kernschritte (z.B. "a_Z1,E = 400/200 = 2"). Verzichte auf ausschweifende textliche 		Erklärungen des Rechenwegs, um das Token-Limit der Antwort nicht zu sprengen.
+	6. [Bewertung]: Wahr oder Falsch.
+	7. [Begründung]: Kurzer Stichpunkt.
 f) Strikter Zeichenabgleich bei mathematischen Termen (Anti-Hineininterpretations-Regel): Wenn eine Antwortoption eine mathematische Formel oder einen Term enthält (z.B. 11,5x2+5x11,5x2+5x), musst du die Formel im ersten Schritt völlig unabhängig herleiten. Im zweiten Schritt musst du dein Ergebnis ZEICHEN FÜR ZEICHEN mit dem Text in der Option abgleichen. Beispiel: Wenn deine Herleitung 11,5x+511,5x+5 ergibt, in der Option aber 11,5x+5x11,5x+5x steht, ist die Option ZWINGEND FALSCH. Du darfst NIEMALS annehmen, dass es sich um einen "Tippfehler" in der Klausur handelt. Du darfst NIEMALS eine falsche Formel in der Option als "Wahr" bewerten, nur weil dein eigener Rechenweg richtig war. Abweichung um ein einziges Zeichen = FALSCH.teht, ist die Option ZWINGEND FALSCH. Du darfst NIEMALS annehmen, dass es sich um einen "Tippfehler" in der Klausur handelt. Du darfst NIEMALS eine falsche Formel in der Option als "Wahr" bewerten, nur weil dein eigener Rechenweg richtig war. Abweichung um ein einziges Zeichen = FALSCH. 
+
 4. Finale Synthese & Konsistenz-Check: 
 Fasse alle als "Richtig" bewerteten Optionen zusammen. 
 Prüfe nur noch einmal: "Habe ich für JEDE Option eine Begründung geliefert, die auf dem Skript basiert?" 
@@ -125,10 +129,11 @@ Bevor du antwortest, validiere deine Rechnung intern:
 
 
 OUTPUT-FORMAT:
-Gib deine finale Antwort zwingend im folgenden Format aus:
+- Gib deine finale Antwort zwingend im folgenden Format aus:
 Aufgabe [Nr]: [Finales Ergebnis]
 Begründung: [Kurze 1-Satz-Erklärung des Ergebnisses basierend auf der Fernuni-Methode. 
-Verstoße niemals gegen dieses Format!"""
+Verstoße niemals gegen dieses Format!  
+- Prüfe intern: "Habe ich das Prüfungsprotokoll für Option E abgeschlossen?" Erst wenn die Antwort JA lautet, generiere zwingend und ausschließlich folgendes Format: Aufgabe [Nr]: [Finales Ergebnis] Begründung: [Kurze 1-Satz-Erklärung des Ergebnisses basierend auf der Fernuni-Methode.] Verstoße niemals gegen dieses Format!"""
 
         # Multimodaler Input
         parts = []
