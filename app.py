@@ -139,21 +139,17 @@ Verstoße niemals gegen dieses Format!  
         parts = []
         if pdf_files:
             for pdf in pdf_files:
-                # Wir lesen die PDF-Daten einmal ein
                 pdf_data = pdf.read()
                 parts.append(types.Part.from_bytes(data=pdf_data, mime_type="application/pdf"))
                 # Zeiger zurücksetzen, falls die Funktion mehrfach aufgerufen wird
                 pdf.seek(0)
         
-        # Bildbytes
         img_byte_arr = io.BytesIO()
         image.save(img_byte_arr, format='JPEG')
         parts.append(types.Part.from_bytes(data=img_byte_arr.getvalue(), mime_type="image/jpeg"))
         
-        # Auftrag
         parts.append("Löse ALLE Aufgaben auf dem Bild unter strikter Einhaltung deines Lösungsprozesses")
 
-        # API Aufruf (Der Client nutzt nun automatisch die Retry-Logik aus Step 2)
         response = client.models.generate_content(
             model="gemini-3.5-flash",
             contents=parts,
@@ -189,7 +185,7 @@ with col2:
         if st.button("Aufgaben lösen", type="primary"):
             # Ein Status-Container sieht professioneller aus
             status_container = st.empty()
-            with status_container.status("Gemini 3.1 Pro analysiert... (bei Störungen werden autom. Retries durchgeführt)", expanded=True) as status:
+            with status_container.status("Gemini 3.5 Flash analysiert...", expanded=True) as status:
                 result = solve_everything(img, pdfs)
                 st.markdown("### Ergebnis")
                 st.write(result)
