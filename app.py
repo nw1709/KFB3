@@ -149,7 +149,7 @@ Verstoße niemals gegen dieses Format!"""
 
         # API Aufruf (Der Client nutzt nun automatisch die Retry-Logik aus Step 2)
         response = client.models.generate_content(
-            model="gemini-3.1-pro-preview",
+            model="gemini-3.5-flash",
             contents=parts,
             config=types.GenerateContentConfig(
                 system_instruction=sys_instr,
