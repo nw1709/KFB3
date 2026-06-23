@@ -203,4 +203,19 @@ with col2:
     with chat_container:
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):
-                st.markdown(msg
+               st.markdown(msg["content"])
+    
+    if user_input := st.chat_input("Chat"):
+        if not uploaded_files:
+            st.warning("Bitte lade zuerst eine Aufgabe hoch!")
+        else:
+            st.session_state.messages.append({"role": "user", "content": user_input})
+            with chat_container:
+                with st.chat_message("user"):
+                    st.markdown(user_input)
+            
+            with st.chat_message("assistant"):
+                with st.spinner("Gemini antwortet..."):
+                    result = generate_response(user_input, processed_images, pdfs)
+                    st.markdown(result)
+                    st.session_state.messages.append({"role": "assistant", "content": result})
