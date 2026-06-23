@@ -4,6 +4,7 @@ from google.genai import types
 from PIL import Image
 import io
 
+# --- 1. UI SETUP ---
 st.set_page_config(layout="wide", page_title="KFB3", page_icon="🦊")
 
 st.markdown(f'''
@@ -12,13 +13,15 @@ st.markdown(f'''
 <meta name="theme-color" content="#FF6600"> 
 ''', unsafe_allow_html=True)
 
-st.title("🦊 KFB3 (wichtig: für JEDE neue Aufgabe bitte Verlauf löschen!)")
+st.title("🦊 KFB3")
 
+# --- 2. SESSION STATE ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "rot" not in st.session_state: 
     st.session_state.rot = 0
 
+# --- 3. API KONFIGURATION ---
 def get_client():
     if 'gemini_key' not in st.secrets:
         st.error("API Key fehlt. Bitte in den Secrets hinterlegen.")
@@ -39,6 +42,7 @@ def get_client():
 
 client = get_client()
 
+# --- 4. SIDEBAR ---
 with st.sidebar:
     st.header("📚 Knowledge Base")
     pdfs = st.file_uploader("PDF-Skripte hochladen", type=["pdf"], accept_multiple_files=True)
@@ -50,10 +54,12 @@ with st.sidebar:
         st.rerun()
         
     st.divider()
-    st.info("model: Gemini 3.5 Flash")
+    st.info("model: Gemini 3.5 Flash (Code Execution)")
 
+# --- 5. DER MASTER-SOLVER ---
 def generate_response(prompt, images, pdf_files):
     try:
+        # NEU: Prompt angepasst, um die Nutzung von Code für Mathe zu erzwingen
         sys_instr = """Du bist ein präziser Assistent für Modul 31031 
 (Internes Rechnungswesen, FernUniversität Hagen).
 
@@ -68,34 +74,28 @@ Stellen mit [Fachwissen].
 
 ABSOLUTES VERBOT:
 Erfinde niemals fehlende Werte (z. B. fixe Kosten, 
-Bestandswerte, Mengenvorgaben). Wenn Werte in der 
-Aufgabe fehlen, weise explizit darauf hin und frage 
+Bestandswerte, Mengenvorgaben). Wenn Werte fehlen, frage 
 nach – rechne NICHT mit angenommenen Beispielwerten.
 
 LÖSUNGSPROZESS:
 1. Aufgabe analysieren – alle gegebenen Werte auflisten
 2. Fehlende Werte sofort benennen – nicht ergänzen
 3. Methode aus Modul 31031 anwenden
-4. Schritt für Schritt rechnen
+4. Nutze für ALLE komplexeren Rechnungen dein Code-Execution-Tool (Python), um absolute Rechenfehlerfreiheit zu garantieren!
 5. Ergebnis klar ausgeben
 
-BEI MULTIPLE-CHOICE / WAHR-FALSCH (Prüfungsprotokoll):
+BEI MULTIPLE-CHOICE / WAHR-FALSCH:
 Bewerte jede Option zwingend einzeln im folgenden Format:
-
 Option [Buchstabe]:
-1. Anomalie-Check: Fällt diese Aussage unter eine 
-   bekannte FernUni-Hagen-Besonderheit? Ja/Nein.
+1. Anomalie-Check: FernUni-Hagen-Besonderheit? Ja/Nein.
 2. Behauptung: Was behauptet die Option konkret?
 3. Fakt laut Skript/Modul: Was ist die korrekte Aussage?
 4. Abgleich: Stimmt Behauptung mit Fakt überein? Ja/Nein.
 5. Bewertung: Wahr / Falsch
 6. Begründung: Ein Satz.
 
-Vollständigkeitspflicht: Alle Optionen müssen geprüft 
-werden – auch wenn eine offensichtlich richtige Option 
-bereits gefunden wurde.
-Reduziere das Ergebnis NIEMALS nachträglich auf eine 
-einzige Option, wenn mehrere korrekt sind.
+Vollständigkeitspflicht: Alle Optionen müssen geprüft werden.
+Reduziere das Ergebnis NIEMALS auf eine einzige Option, wenn mehrere korrekt sind.
 
 AUSGABEFORMAT:
 Aufgabe [Nr.]: [Ergebnis]
@@ -105,7 +105,6 @@ FORMAT: Deutsch, fachlich sauber, Schritt für Schritt."""
 
         contents = []
         
-        # 1. Bisherigen Chat-Verlauf übergeben
         for msg in st.session_state.messages:
             role = "user" if msg["role"] == "user" else "model"
             contents.append(
@@ -127,10 +126,9 @@ FORMAT: Deutsch, fachlich sauber, Schritt für Schritt."""
                 current_parts.append(types.Part.from_bytes(data=img_byte_arr.getvalue(), mime_type="image/jpeg"))
         
         current_parts.append(types.Part.from_text(text=prompt))
-        
-        # Aktuelle Anfrage an die History hängen
         contents.append(types.Content(role="user", parts=current_parts))
 
+        # NEU: Code Execution explizit in den tools aktiviert
         response = client.models.generate_content(
             model="gemini-3.5-flash",
             contents=contents,
@@ -138,15 +136,25 @@ FORMAT: Deutsch, fachlich sauber, Schritt für Schritt."""
                 system_instruction=sys_instr,
                 temperature=0,
                 max_output_tokens=15000,
+                tools=[{"code_execution": {}}] 
             )
         )
 
-        if response.candidates and response.candidates[0].content.parts:
-            text_parts = [part.text for part in response.candidates[0].content.parts if part.text is not None]
-            if text_parts:
-                return "".join(text_parts)
+        # NEU: Intelligentes Auslesen von Text, Python-Code UND Rechner-Ergebnissen
+        if response.candidates and response.candidates[0].content:
+            output_text = ""
+            for part in response.candidates[0].content.parts:
+                if hasattr(part, 'text') and part.text:
+                    output_text += part.text
+                elif hasattr(part, 'executable_code') and part.executable_code:
+                    output_text += f"\n\n**🤖 Python-Rechnung:**\n```python\n{part.executable_code.code}\n```\n"
+                elif hasattr(part, 'code_execution_result') and part.code_execution_result:
+                    output_text += f"**Ausgabe des Taschenrechners:**\n```text\n{part.code_execution_result.output}\n```\n\n"
+            
+            if output_text:
+                return output_text
             else:
-                return "Fehler: Die KI hat eine unerwartete Antwortstruktur zurückgegeben (kein Text gefunden)."
+                return "Fehler: Die KI hat eine unerwartete Antwortstruktur zurückgegeben."
         
         return "Fehler: Keine Antwort von der KI erhalten."
 
@@ -176,36 +184,28 @@ with col1:
 with col2:
     st.subheader("💬 Chat & Lösung")
     
-    # 1. Bisherigen Chat-Verlauf anzeigen
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
     
-    # 2. Trigger für neue Nachrichten
     auto_prompt = None
     
-    # Der Button wird nur angezeigt, wenn Bilder da sind
     if uploaded_files:
         if st.button("🚀 Alle Aufgaben auf den Bildern lösen", type="primary"):
             auto_prompt = "Löse ALLE Aufgaben auf den hochgeladenen Bildern unter strikter Einhaltung deines Lösungsprozesses."
             
-    # Das Eingabefeld für den manuellen Chat
-    user_input = st.chat_input("Chat")
+    user_input = st.chat_input("Oder stelle eine Frage zu den Dokumenten...")
     
-    # 3. Logik: Wenn Button geklickt ODER Text getippt wurde
     final_prompt = auto_prompt or user_input
     
     if final_prompt:
-        # User-Nachricht ins UI schreiben und speichern
         with st.chat_message("user"):
             st.markdown(final_prompt)
         st.session_state.messages.append({"role": "user", "content": final_prompt})
         
-        # KI-Antwort generieren
         with st.chat_message("assistant"):
-            with st.spinner("Gemini analysiert..."):
+            with st.spinner("Gemini analysiert & rechnet..."):
                 result = generate_response(final_prompt, processed_images, pdfs)
                 st.markdown(result)
         
-        # KI-Antwort speichern
         st.session_state.messages.append({"role": "assistant", "content": result})
