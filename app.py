@@ -3,9 +3,7 @@ from google import genai
 from google.genai import types
 from PIL import Image
 import io
-import os
 
-# --- 1. UI SETUP ---
 st.set_page_config(layout="wide", page_title="KFB3", page_icon="🦊")
 
 st.markdown(f'''
@@ -16,19 +14,22 @@ st.markdown(f'''
 
 st.title("🦊 KFB3")
 
-# --- 2. API KONFIGURATION (JETZT MIT RETRY-LOGIK) ---
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "rot" not in st.session_state: 
+    st.session_state.rot = 0
+
 def get_client():
     if 'gemini_key' not in st.secrets:
         st.error("API Key fehlt. Bitte in den Secrets hinterlegen.")
         st.stop()
     
-    # Konfiguration der Wiederholungsversuche bei Serverfehlern (503, 504 etc.)
     retry_options = types.HttpRetryOptions(
-        initial_delay=2.0,  # 2 Sekunden warten nach dem ersten Fehler
-        attempts=6,         # Insgesamt 6 Versuche (ca. 1-2 Minuten Puffer)
-        exp_base=2.0,       # Zeit zwischen Versuchen verdoppelt sich
-        max_delay=30.0,     # Maximal 30s Pause zwischen zwei Versuchen
-        http_status_codes=[429, 500, 502, 503, 504] # Fehler, bei denen wiederholt wird
+        initial_delay=2.0,  
+        attempts=6,         
+        exp_base=2.0,       
+        max_delay=30.0,     
+        http_status_codes=[429, 500, 502, 503, 504] 
     )
 
     return genai.Client(
@@ -38,17 +39,20 @@ def get_client():
 
 client = get_client()
 
-# --- 3. SIDEBAR ---
 with st.sidebar:
     st.header("📚 Knowledge Base")
     pdfs = st.file_uploader("PDF-Skripte hochladen", type=["pdf"], accept_multiple_files=True)
     if pdfs:
         st.success(f"{len(pdfs)} Skripte geladen.")
+    
+    if st.button("🗑️ Chat-Verlauf löschen"):
+        st.session_state.messages = []
+        st.rerun()
+        
     st.divider()
     st.info("model: Gemini 3.5 Flash")
 
-# --- 4. DER MASTER-SOLVER ---
-def solve_everything(image, pdf_files):
+def generate_response(prompt, images, pdf_files):
     try:
         sys_instr = """Du bist ein präziser Assistent für Modul 31031 
 (Internes Rechnungswesen, FernUniversität Hagen).
@@ -99,24 +103,37 @@ Begründung: [Ein Satz auf Basis der FernUni-Methode]
 
 FORMAT: Deutsch, fachlich sauber, Schritt für Schritt."""
 
-        # Multimodaler Input
-        parts = []
+        contents = []
+        
+        # 1. Bisherigen Chat-Verlauf übergeben
+        for msg in st.session_state.messages:
+            role = "user" if msg["role"] == "user" else "model"
+            contents.append(
+                types.Content(role=role, parts=[types.Part.from_text(text=msg["content"])])
+            )
+
+        current_parts = []
+        
         if pdf_files:
             for pdf in pdf_files:
                 pdf_data = pdf.read()
-                parts.append(types.Part.from_bytes(data=pdf_data, mime_type="application/pdf"))
-                # Zeiger zurücksetzen, falls die Funktion mehrfach aufgerufen wird
+                current_parts.append(types.Part.from_bytes(data=pdf_data, mime_type="application/pdf"))
                 pdf.seek(0)
         
-        img_byte_arr = io.BytesIO()
-        image.save(img_byte_arr, format='JPEG')
-        parts.append(types.Part.from_bytes(data=img_byte_arr.getvalue(), mime_type="image/jpeg"))
+        if images:
+            for img in images:
+                img_byte_arr = io.BytesIO()
+                img.save(img_byte_arr, format='JPEG')
+                current_parts.append(types.Part.from_bytes(data=img_byte_arr.getvalue(), mime_type="image/jpeg"))
         
-        parts.append("Löse ALLE Aufgaben auf dem Bild unter strikter Einhaltung deines Lösungsprozesses")
+        current_parts.append(types.Part.from_text(text=prompt))
+        
+        # Aktuelle Anfrage an die History hängen
+        contents.append(types.Content(role="user", parts=current_parts))
 
         response = client.models.generate_content(
             model="gemini-3.5-flash",
-            contents=parts,
+            contents=contents,
             config=types.GenerateContentConfig(
                 system_instruction=sys_instr,
                 temperature=0,
@@ -124,35 +141,71 @@ FORMAT: Deutsch, fachlich sauber, Schritt für Schritt."""
             )
         )
 
-        return response.text
+        if response.candidates and response.candidates[0].content.parts:
+            text_parts = [part.text for part in response.candidates[0].content.parts if part.text is not None]
+            if text_parts:
+                return "".join(text_parts)
+            else:
+                return "Fehler: Die KI hat eine unerwartete Antwortstruktur zurückgegeben (kein Text gefunden)."
+        
+        return "Fehler: Keine Antwort von der KI erhalten."
 
     except Exception as e:
-        # Spezifische Fehlermeldung für den User
         if "503" in str(e) or "overloaded" in str(e).lower():
-            return "Fehler: Die Google-Server sind aktuell überlastet. Trotz 6 Wiederholungsversuchen konnte keine Antwort geladen werden. Bitte in 2 Minuten erneut versuchen."
+            return "Fehler: Die Google-Server sind aktuell überlastet. Bitte in 2 Minuten erneut versuchen."
         return f"Fehler: {str(e)}"
 
-# --- 5. UI LAYOUT ---
-col1, col2 = st.columns([1, 1])
+# --- 6. UI LAYOUT ---
+col1, col2 = st.columns([1, 1.2])
 
 with col1:
-    uploaded_file = st.file_uploader("Klausurblatt hochladen...", type=["png", "jpg", "jpeg"])
-    if uploaded_file:
-        img = Image.open(uploaded_file).convert('RGB')
-        if "rot" not in st.session_state: st.session_state.rot = 0
-        if st.button("🔄 Bild drehen"): st.session_state.rot = (st.session_state.rot + 90) % 360
-        img = img.rotate(-st.session_state.rot, expand=True)
-        st.image(img, use_container_width="stretch")
+    uploaded_files = st.file_uploader("Klausurblätter hochladen...", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
+    
+    processed_images = [] 
+    
+    if uploaded_files:
+        if st.button("🔄 Alle Bilder 90° drehen"): 
+            st.session_state.rot = (st.session_state.rot + 90) % 360
+        
+        for file in uploaded_files:
+            img = Image.open(file).convert('RGB')
+            img = img.rotate(-st.session_state.rot, expand=True)
+            processed_images.append(img)
+            st.image(img)
 
 with col2:
-    if uploaded_file:
-        if st.button("Aufgaben lösen", type="primary"):
-            # Ein Status-Container sieht professioneller aus
-            status_container = st.empty()
-            with status_container.status("Gemini 3.5 Flash analysiert...", expanded=True) as status:
-                result = solve_everything(img, pdfs)
-                st.markdown("### Ergebnis")
-                st.write(result)
-                status.update(label="Analyse abgeschlossen!", state="complete", expanded=False)
-    else:
-        st.info("Bitte lade links ein Bild hoch.")
+    st.subheader("💬 Chat & Lösung")
+    
+    # 1. Bisherigen Chat-Verlauf anzeigen
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+    
+    # 2. Trigger für neue Nachrichten
+    auto_prompt = None
+    
+    # Der Button wird nur angezeigt, wenn Bilder da sind
+    if uploaded_files:
+        if st.button("🚀 Alle Aufgaben auf den Bildern lösen", type="primary"):
+            auto_prompt = "Löse ALLE Aufgaben auf den hochgeladenen Bildern unter strikter Einhaltung deines Lösungsprozesses."
+            
+    # Das Eingabefeld für den manuellen Chat
+    user_input = st.chat_input("Chat")
+    
+    # 3. Logik: Wenn Button geklickt ODER Text getippt wurde
+    final_prompt = auto_prompt or user_input
+    
+    if final_prompt:
+        # User-Nachricht ins UI schreiben und speichern
+        with st.chat_message("user"):
+            st.markdown(final_prompt)
+        st.session_state.messages.append({"role": "user", "content": final_prompt})
+        
+        # KI-Antwort generieren
+        with st.chat_message("assistant"):
+            with st.spinner("Gemini analysiert..."):
+                result = generate_response(final_prompt, processed_images, pdfs)
+                st.markdown(result)
+        
+        # KI-Antwort speichern
+        st.session_state.messages.append({"role": "assistant", "content": result})
