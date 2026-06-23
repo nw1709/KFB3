@@ -34,7 +34,7 @@ def get_client():
 
     return genai.Client(
         api_key=st.secrets["gemini_key"],
-        http_options=types.HttpOptions(retry_options=retry_options, timeout=300.0)
+        http_options=types.HttpOptions(retry_options=retry_options, timeout=300000)
     )
 
 client = get_client()
