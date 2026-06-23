@@ -34,7 +34,7 @@ def get_client():
 
     return genai.Client(
         api_key=st.secrets["gemini_key"],
-        http_options=types.HttpOptions(retry_options=retry_options)
+        http_options=types.HttpOptions(retry_options=retry_options, timeout=300.0)
     )
 
 client = get_client()
@@ -50,7 +50,7 @@ with st.sidebar:
         st.rerun()
         
     st.divider()
-    st.info("model: Gemini 3.5 Flash")
+    st.info("Gemini 3.5 Flash")
 
 def generate_response(prompt, images, pdf_files):
     try:
@@ -141,19 +141,22 @@ Begründung: [Ein Satz auf Basis der FernUni-Methode]"""
             raw_output = ""
             
             for part in response.candidates[0].content.parts:
+                # LÖSUNG 2: Wir fangen hier sauber alles ab!
                 if hasattr(part, 'text') and part.text:
                     output_text += part.text
+                elif hasattr(part, 'executable_code') and part.executable_code:
+                    raw_output += f"\n\n**🤖 Abgebrochener Python-Code:**\n```python\n{part.executable_code.code}\n```\n"
                 elif hasattr(part, 'code_execution_result') and part.code_execution_result:
                     raw_output += f"\n> *[Taschenrechner liefert: {part.code_execution_result.output.strip()}]*\n"
             
             if output_text.strip():
                 return output_text
             elif raw_output.strip():
-                return f"AI hat im Hintergrund gerechnet, aber vergessen, eine Text-Antwort zu formulieren. Hier ist das rohe Ergebnis:*\n{raw_output}"
+                return f"Text nicht fertig formuliert. Hier ist der rohe Zwischenstand der Maschine:\n{raw_output}"
             else:
                 return "Fehler: Die KI hat eine leere Antwort zurückgegeben."
         
-        return "Fehler: Keine Antwort von der KI erhalten."
+        return "Fehler: Keine Antwort erhalten."
 
     except Exception as e:
         if "503" in str(e) or "overloaded" in str(e).lower():
