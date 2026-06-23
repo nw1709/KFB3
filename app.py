@@ -72,9 +72,10 @@ nach – rechne NICHT mit angenommenen Beispielwerten.
 WICHTIGE REGELN ZUR CODE-EXECUTION (Zwingend beachten!):
 1. ISOLIERTE UMGEBUNG: Dein Python-Code hat absolut KEINEN Zugriff auf die hochgeladenen Bilder (wie z.B. .jpeg) oder PDFs!
 2. DER RICHTIGE WORKFLOW: Du musst zuerst mit deinen Fähigkeiten zur Bilderkennung alle Vektoren, Matrizen und Zahlen aus dem Klausurblatt ablesen. 
-3. HARDCODING: Trage diese abgelesenen Zahlen dann als feste Variablen (Arrays/Listen) in deinen Python-Code ein, um die Mathematik zu lösen. Versuche NIEMALS, im Code eine Datei zu öffnen!
-4. KEIN CHAT-GEPLÄNKEL: Kündige dein Vorhaben nicht an. Sätze wie "I will write a python script..." sind strengstens verboten. Führe den Code sofort aus!
-5. SPRACHE: Antworte immer und ausnahmslos auf Deutsch.
+3. HARDCODING: Trage diese abgelesenen Zahlen dann als feste Variablen in deinen Python-Code ein, um die Mathematik zu lösen. 
+4. KEIN CHAT-GEPLÄNKEL: Kündige dein Vorhaben nicht an. Führe den Code sofort aus!
+5. SPRACHE: Antworte immer auf Deutsch.
+6. UNSICHTBARER CODE: Der Benutzer kann deinen Code und das Rechner-Ergebnis NICHT sehen! Du MUSST das finale Ergebnis nach der Berechnung zwingend noch einmal als normalen Text ausformulieren!
 
 LÖSUNGSPROZESS:
 1. Aufgabe analysieren – alle gegebenen Werte auflisten
@@ -137,16 +138,22 @@ Begründung: [Ein Satz auf Basis der FernUni-Methode]"""
 
         if response.candidates and response.candidates[0].content:
             output_text = ""
+            raw_output = ""
+            
             for part in response.candidates[0].content.parts:
                 if hasattr(part, 'text') and part.text:
                     output_text += part.text
+                elif hasattr(part, 'code_execution_result') and part.code_execution_result:
+                    raw_output += f"\n> *[Taschenrechner liefert: {part.code_execution_result.output.strip()}]*\n"
             
-            if output_text:
+            if output_text.strip():
                 return output_text
+            elif raw_output.strip():
+                return f"AI hat im Hintergrund gerechnet, aber vergessen, eine Text-Antwort zu formulieren. Hier ist das rohe Ergebnis:*\n{raw_output}"
             else:
-                return "Fehler: Unerwartete Antwortstruktur zurückgegeben."
+                return "Fehler: Die KI hat eine leere Antwort zurückgegeben."
         
-        return "Fehler: Keine Antwort erhalten."
+        return "Fehler: Keine Antwort von der KI erhalten."
 
     except Exception as e:
         if "503" in str(e) or "overloaded" in str(e).lower():
@@ -172,7 +179,7 @@ with col1:
             st.image(img)
 
 with col2:
-    st.subheader("Chat & Lösung")
+    st.subheader("Chat")
     
     if uploaded_files:
         if st.button("Aufgaben lösen & Verlauf auto-clear)", type="primary", use_container_width=True):
@@ -195,7 +202,7 @@ with col2:
     
     if user_input := st.chat_input("Chat"):
         if not uploaded_files:
-            st.warning("Bitte lade zuerst eine Aufgabe hoch")
+            st.warning("Bitte lade zuerst eine Aufgabe hoch!")
         else:
             st.session_state.messages.append({"role": "user", "content": user_input})
             with chat_container:
