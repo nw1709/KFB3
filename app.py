@@ -12,7 +12,7 @@ st.markdown(f'''
 <meta name="theme-color" content="#FF6600"> 
 ''', unsafe_allow_html=True)
 
-st.title("🦊 KFB3")
+st.title("🦊 KFB3 (wichtig: für JEDE neue Aufgabe bitte Verlauf löschen!)")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
