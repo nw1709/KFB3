@@ -73,15 +73,16 @@ WICHTIGE REGELN ZUR CODE-EXECUTION (Zwingend beachten!):
 1. ISOLIERTE UMGEBUNG: Dein Python-Code hat absolut KEINEN Zugriff auf die hochgeladenen Bilder (wie z.B. .jpeg) oder PDFs!
 2. DER RICHTIGE WORKFLOW: Du musst zuerst mit deinen Fähigkeiten zur Bilderkennung alle Vektoren, Matrizen und Zahlen aus dem Klausurblatt ablesen. 
 3. HARDCODING: Trage diese abgelesenen Zahlen dann als feste Variablen in deinen Python-Code ein, um die Mathematik zu lösen. 
-4. KEIN CHAT-GEPLÄNKEL: Kündige dein Vorhaben nicht an. Führe den Code sofort aus!
-5. SPRACHE: Antworte immer auf Deutsch.
-6. UNSICHTBARER CODE: Der Benutzer kann deinen Code und das Rechner-Ergebnis NICHT sehen! Du MUSST das finale Ergebnis nach der Berechnung zwingend noch einmal als normalen Text ausformulieren!
+4. OPTIONALER EINSATZ: Nutze den Code-Interpreter NUR, wenn du komplexe Rechnungen durchführen musst! Rein visuelle oder theoretische Aufgaben löst du direkt ohne Code.
+5. KEIN CHAT-GEPLÄNKEL: Kündige dein Vorhaben nicht an. Führe den Code sofort aus!
+6. SPRACHE: Antworte immer auf Deutsch.
+7. UNSICHTBARER CODE: Der Benutzer kann deinen Code und das Rechner-Ergebnis NICHT sehen! Du MUSST das finale Ergebnis nach der Berechnung zwingend noch einmal als normalen Text ausformulieren!
 
 LÖSUNGSPROZESS:
 1. Aufgabe analysieren – alle gegebenen Werte auflisten
 2. Fehlende Werte sofort benennen – nicht ergänzen
 3. Methode aus Modul 31031 anwenden
-4. Code Execution ausführen (mit den hardcodierten Zahlen!)
+4. Code Execution ausführen (nur falls nötig, mit den hardcodierten Zahlen!)
 5. Ergebnis klar ausgeben
 
 BEI MULTIPLE-CHOICE / WAHR-FALSCH:
@@ -141,13 +142,15 @@ Begründung: [Ein Satz auf Basis der FernUni-Methode]"""
             raw_output = ""
             
             for part in response.candidates[0].content.parts:
-                # LÖSUNG 2: Wir fangen hier sauber alles ab!
                 if hasattr(part, 'text') and part.text:
                     output_text += part.text
                 elif hasattr(part, 'executable_code') and part.executable_code:
                     raw_output += f"\n\n**🤖 Abgebrochener Python-Code:**\n```python\n{part.executable_code.code}\n```\n"
                 elif hasattr(part, 'code_execution_result') and part.code_execution_result:
-                    raw_output += f"\n> *[Taschenrechner liefert: {part.code_execution_result.output.strip()}]*\n"
+                    # LÖSUNG: Sicherer Fallback, falls die KI-Rechnung "None" (Nichts) zurückgibt
+                    calc_res = part.code_execution_result.output
+                    safe_output = calc_res.strip() if calc_res else "Keine Ausgabe (KI hat vergessen, das Ergebnis zu drucken)"
+                    raw_output += f"\n> *[Taschenrechner liefert: {safe_output}]*\n"
             
             if output_text.strip():
                 return output_text
@@ -163,7 +166,6 @@ Begründung: [Ein Satz auf Basis der FernUni-Methode]"""
             return "Fehler: Die Google-Server sind aktuell überlastet. Bitte in 2 Minuten erneut versuchen."
         return f"Fehler: {str(e)}"
 
-# --- 6. UI LAYOUT ---
 col1, col2 = st.columns([1, 1.2])
 
 with col1:
@@ -188,7 +190,7 @@ with col2:
         if st.button("Aufgaben lösen & Verlauf auto-clear)", type="primary", use_container_width=True):
             st.session_state.messages = []
             
-            auto_prompt = "Löse ALLE Aufgaben auf den hochgeladenen Bildern unter strikter Einhaltung deines Lösungsprozesses."
+            auto_prompt = "Löse alle Aufgaben auf den hochgeladenen Bildern. WICHTIGER WORKFLOW: Nutze deinen Code-Interpreter NUR für komplexe Rechnungen (z.B. Matrizen). Rein visuelle oder theoretische Aufgaben (wie Graphen analysieren) beantwortest du direkt im Text. Gib am Ende JEDER Aufgabe ZWINGEND das Format 'Aufgabe [Nr]: [Ergebnis]' und einen Satz Begründung aus."
             st.session_state.messages.append({"role": "user", "content": auto_prompt})
             
             with st.spinner("Gemini rechnet..."):
@@ -201,19 +203,4 @@ with col2:
     with chat_container:
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):
-                st.markdown(msg["content"])
-    
-    if user_input := st.chat_input("Chat"):
-        if not uploaded_files:
-            st.warning("Bitte lade zuerst eine Aufgabe hoch!")
-        else:
-            st.session_state.messages.append({"role": "user", "content": user_input})
-            with chat_container:
-                with st.chat_message("user"):
-                    st.markdown(user_input)
-            
-            with st.chat_message("assistant"):
-                with st.spinner("Gemini antwortet..."):
-                    result = generate_response(user_input, processed_images, pdfs)
-                    st.markdown(result)
-                    st.session_state.messages.append({"role": "assistant", "content": result})
+                st.markdown(msg
