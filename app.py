@@ -4,7 +4,6 @@ from google.genai import types
 from PIL import Image
 import io
 
-# --- 1. UI SETUP ---
 st.set_page_config(layout="wide", page_title="KFB3", page_icon="🦊")
 
 st.markdown(f'''
@@ -15,13 +14,11 @@ st.markdown(f'''
 
 st.title("🦊 KFB3")
 
-# --- 2. SESSION STATE ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "rot" not in st.session_state: 
     st.session_state.rot = 0
 
-# --- 3. API KONFIGURATION ---
 def get_client():
     if 'gemini_key' not in st.secrets:
         st.error("API Key fehlt. Bitte in den Secrets hinterlegen.")
@@ -42,24 +39,21 @@ def get_client():
 
 client = get_client()
 
-# --- 4. SIDEBAR ---
 with st.sidebar:
     st.header("📚 Knowledge Base")
     pdfs = st.file_uploader("PDF-Skripte hochladen", type=["pdf"], accept_multiple_files=True)
     if pdfs:
         st.success(f"{len(pdfs)} Skripte geladen.")
     
-    if st.button("🗑️ Chat-Verlauf löschen"):
+    if st.button("🗑️ Chat-Verlauf manuell löschen", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
         
     st.divider()
-    st.info("model: Gemini 3.5 Flash (Code Execution)")
+    st.info("model: Gemini 3.5 Flash")
 
-# --- 5. DER MASTER-SOLVER ---
 def generate_response(prompt, images, pdf_files):
     try:
-        # NEU: Prompt angepasst, um die Nutzung von Code für Mathe zu erzwingen
         sys_instr = """Du bist ein präziser Assistent für Modul 31031 
 (Internes Rechnungswesen, FernUniversität Hagen).
 
@@ -130,7 +124,6 @@ Begründung: [Ein Satz auf Basis der FernUni-Methode]"""
         current_parts.append(types.Part.from_text(text=prompt))
         contents.append(types.Content(role="user", parts=current_parts))
 
-        # NEU: Code Execution explizit in den tools aktiviert
         response = client.models.generate_content(
             model="gemini-3.5-flash",
             contents=contents,
@@ -142,23 +135,18 @@ Begründung: [Ein Satz auf Basis der FernUni-Methode]"""
             )
         )
 
-        # NEU: Intelligentes Auslesen von Text, Python-Code UND Rechner-Ergebnissen
         if response.candidates and response.candidates[0].content:
             output_text = ""
             for part in response.candidates[0].content.parts:
                 if hasattr(part, 'text') and part.text:
                     output_text += part.text
-                elif hasattr(part, 'executable_code') and part.executable_code:
-                    output_text += f"\n\n**🤖 Python-Rechnung:**\n```python\n{part.executable_code.code}\n```\n"
-                elif hasattr(part, 'code_execution_result') and part.code_execution_result:
-                    output_text += f"**Ausgabe des Taschenrechners:**\n```text\n{part.code_execution_result.output}\n```\n\n"
             
             if output_text:
                 return output_text
             else:
-                return "Fehler: Die KI hat eine unerwartete Antwortstruktur zurückgegeben."
+                return "Fehler: Unerwartete Antwortstruktur zurückgegeben."
         
-        return "Fehler: Keine Antwort von der KI erhalten."
+        return "Fehler: Keine Antwort erhalten."
 
     except Exception as e:
         if "503" in str(e) or "overloaded" in str(e).lower():
@@ -174,7 +162,7 @@ with col1:
     processed_images = [] 
     
     if uploaded_files:
-        if st.button("🔄 Alle Bilder 90° drehen"): 
+        if st.button("Bilder 90° drehen"): 
             st.session_state.rot = (st.session_state.rot + 90) % 360
         
         for file in uploaded_files:
@@ -184,30 +172,38 @@ with col1:
             st.image(img)
 
 with col2:
-    st.subheader("💬 Chat & Lösung")
-    
-    for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
-    
-    auto_prompt = None
+    st.subheader("Chat & Lösung")
     
     if uploaded_files:
-        if st.button("🚀 Alle Aufgaben auf den Bildern lösen", type="primary"):
-            auto_prompt = "Löse ALLE Aufgaben auf den hochgeladenen Bildern unter strikter Einhaltung deines Lösungsprozesses."
+        if st.button("Aufgaben lösen & Verlauf auto-clear)", type="primary", use_container_width=True):
+            st.session_state.messages = []
             
-    user_input = st.chat_input("Oder stelle eine Frage zu den Dokumenten...")
+            auto_prompt = "Löse ALLE Aufgaben auf den hochgeladenen Bildern unter strikter Einhaltung deines Lösungsprozesses."
+            st.session_state.messages.append({"role": "user", "content": auto_prompt})
+            
+            with st.spinner("Gemini rechnet..."):
+                answer = generate_response(auto_prompt, processed_images, pdfs)
+                st.session_state.messages.append({"role": "assistant", "content": answer})
+            
+            st.rerun()
+
+    chat_container = st.container(height=600)
+    with chat_container:
+        for msg in st.session_state.messages:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
     
-    final_prompt = auto_prompt or user_input
-    
-    if final_prompt:
-        with st.chat_message("user"):
-            st.markdown(final_prompt)
-        st.session_state.messages.append({"role": "user", "content": final_prompt})
-        
-        with st.chat_message("assistant"):
-            with st.spinner("Gemini analysiert & rechnet..."):
-                result = generate_response(final_prompt, processed_images, pdfs)
-                st.markdown(result)
-        
-        st.session_state.messages.append({"role": "assistant", "content": result})
+    if user_input := st.chat_input("Chat"):
+        if not uploaded_files:
+            st.warning("Bitte lade zuerst eine Aufgabe hoch")
+        else:
+            st.session_state.messages.append({"role": "user", "content": user_input})
+            with chat_container:
+                with st.chat_message("user"):
+                    st.markdown(user_input)
+            
+            with st.chat_message("assistant"):
+                with st.spinner("Gemini antwortet..."):
+                    result = generate_response(user_input, processed_images, pdfs)
+                    st.markdown(result)
+                    st.session_state.messages.append({"role": "assistant", "content": result})
