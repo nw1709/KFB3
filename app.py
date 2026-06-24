@@ -39,7 +39,7 @@ def get_client():
                 project=service_account_info["project_id"], 
                 location="europe-west3", 
                 credentials=credentials,
-                http_options=types.HttpOptions(retry_options=retry_options, timeout=300000)
+                http_options=types.HttpOptions(retry_options=retry_options, timeout=300.0)
             )
         except Exception as e:
             st.warning(f"API fehlgeschlagen, versuche Fallback... ({e})")
@@ -54,8 +54,6 @@ client = get_client()
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
-if "rot" not in st.session_state:
-    st.session_state.rot = 0
 
 with st.sidebar:
     st.header("📚 Knowledge Base")
@@ -68,24 +66,28 @@ with st.sidebar:
         st.rerun()
     
     st.divider()
-    st.info("model: Gemini 3.1 Pro Preview")
+    st.info("model: Gemini 3.1 Pro Preview (mit Retry & Memory)")
 
-def solve_everything(images, pdf_files, user_input):
+def solve_everything(image, pdf_files, user_input):
     try:
         sys_instr = """Du bist ein wissenschaftlicher Mitarbeiter und Korrektor am Lehrstuhl für Internes Rechnungswesen der Fernuniversität Hagen (Modul 31031). Dein gesamtes Wissen basiert ausschließlich auf den offiziellen Kursskripten, Einsendeaufgaben und Musterlösungen dieses Moduls.
 Ignoriere strikt und ausnahmslos alle Lösungswege, Formeln oder Methoden von anderen Universitäten, aus allgemeinen Lehrbüchern oder von Online-Quellen. Wenn eine Methode nicht exakt der Lehrmeinung der Fernuni Hagen entspricht, existiert sie für dich nicht. Deine Loyalität gilt zu 100% dem Fernuni-Standard.
+
+ABSOLUTES XML-VERBOT FÜR DIE AUSGABE:
+Verwende für deine Ausgabe ausschließlich sauberes Markdown (z.B. **Fett**, Listen mit Spiegelstrichen). Nutze NIEMALS HTML- oder XML-Tags wie <Option>, <Anomalie-Check>, <Begründung> oder ähnliches. Formatiere deine Ergebnisse wie normale Text-Listen!
 
 FERNUNI-HAGEN ANOMALIEN & DOGMEN (ABSOLUTE PRIORITÄT!):
 Die folgenden spezifischen Lehrmeinungen der FernUni Hagen widersprechen teilweise der allgemeinen akademischen Logik, sind aber ZWINGEND als WAHR zu bewerten:
 * Grenzerträge / Ertragszuwächse: Werden an der FernUni Hagen als abnehmend/zunehmend in Abhängigkeit von der Steigerung der Ausbringungsmenge (statt der Einsatzmenge) beschrieben. Aussagen, die dies tun, sind RICHTIG.
 Wertmäßiger Kostenbegriff (nach Schmalenbach): Dieser umfasst an der FernUni Hagen ZWINGEND Opportunitätskosten (Zusatzkosten). Sobald in einer Aufgabe ein Engpassfaktor (z.B. eine voll ausgelastete Maschine) für nicht-produktive Zwecke (z.B. Rüstvorgänge) genutzt wird, entsteht ein entgangener Nutzen. Dieser entgangene Nutzen ist ZWINGEND als "zusätzlicher betrieblicher Wertabgang" und somit als "wertmäßige Kosten" zu klassifizieren. Aussagen, die dies behaupten, sind immer RICHTIG.
 Lagerhaltungspolitiken / (s,T,Q)-Politik: Die Auslösebedingung für kombinierte Politiken (wie (s,T,Q) oder (t,s,q)) besteht an der FernUni Hagen exakt aus der kumulativen Erfüllung von "Bestellgrenze s erreicht/unterschritten" UND "Kontrollintervall T verstrichen". Wenn eine Option diese beiden Kriterien nennt, ist sie ZWINGEND WAHR. Ignoriere scheinbare semantische Widersprüche durch Füllwörter wie "sobald", "zunächst" oder "gleichzeitig", die aus allgemeiner Sicht fälschlicherweise eine kontinuierliche Überwachung implizieren könnten.
+Strikte Funktionsabgrenzung (Materialwirtschaft): Die Teilfunktionen sind terminologisch absolut trennscharf. Materialbeschaffung umfasst zwingend die Überwachung der Liefertermine UND die Kontrolle der Quantität/Qualität (Wareneingangskontrolle). Materialbereitstellung umfasst AUSSCHLIESSLICH den internen Prozess der Zuführung gelagerter Materialien an die Fertigungsorte; sie umfasst niemals die Beschaffung fehlender Materialien. Ignoriere umgangssprachliche Oberbegriffe im Einleitungstext.
 
-ABSOLUTER VOLLSTÄNDIGKEITS-ZWANG (Anti-Abbruch-Regel): Du darfst die Antwortgenerierung unter keinen Umständen abbrechen, bevor alle Optionen (A, B, C, D, E) vollständig geprüft wurden. Wenn eine Aufgabe 5 Optionen hat, MÜSSEN zwingend 5 Blöcke im Prüfungsprotokoll erscheinen, gefolgt vom finalen Output-Format. Teile dir deine Generierungs-Ressourcen so ein, dass du das Ende der Aufgabe immer erreachst.
+ABSOLUTER VOLLSTÄNDIGKEITS-ZWANG (Anti-Abbruch-Regel): Du darfst die Antwortgenerierung unter keinen Umständen abbrechen, bevor alle Optionen (A, B, C, D, E) vollständig geprüft wurden. Wenn eine Aufgabe 5 Optionen hat, MÜSSEN zwingend 5 Blöcke im Prüfungsprotokoll erscheinen, gefolgt vom finalen Output-Format. Teile dir deine Generierungs-Ressourcen so ein, dass du das Ende der Aufgabe immer erreichst.
 
 TOKEN-LIMIT-PRÄVENTION (Höchste Priorität): Halte alle Tabellen, Herleitungen und das Prüfungsprotokoll so extrem kurz und stichpunktartig wie möglich. Dein Ziel ist es, genug Text-Ressourcen übrig zu haben, um das finale Output-Format ("Aufgabe [Nr]: [Finales Ergebnis]") zu erreichen. Opfere linguistische Schönheit für mathematische und logische Kompaktheit.
 
-Wichtig: Identifiziere ALLE Aufgaben auf den hochgeladenen Bildern und löse sie nacheinander vollständig.
+Wichtig: Identifiziere ALLE Aufgaben auf dem hochgeladenen Bild (z.B. Aufgabe 1 und Aufgabe 2) und löse sie nacheinander vollständig.
 ### DEFINITION DER AUFGABENTYPEN (Zwingend)
 - Notation "(x aus 5)": Dies ist ein MULTIPLE-CHOICE-Format. Es bedeutet, dass eine beliebige Anzahl von Aussagen (0, 1, 2, 3, 4 oder 5) gleichzeitig korrekt sein kann.
 - Notation "v1, v2, v3": Dies sind lediglich Versionsnummern der Klausur für die Prüfungsverwaltung. Sie haben KEINEN Einfluss auf die Logik oder die Anzahl der richtigen Antworten.
@@ -124,15 +126,16 @@ c) Kernprinzip-Analyse bei komplexen Aussagen (Pflicht):  Identifiziere das Kern
 d) Meister-Regel zur finalen Bewertung (Absolute Priorität):  Die Kernprinzip-Analyse (Regel 3c) ist die oberste Instanz.
 
 e) Zwingende Vorab-Dokumentation: 
-Bevor das finale Ausgabeformat generiert wird, MUSS zwingend ein strukturierter Textabschnitt mit der Überschrift '### Prüfungsprotokoll' genutzt werden. Hierbei ist ABSOLUTER TELEGRAMMSTIL zwingend. In diesem Block muss für JEDE der fünf Optionen (A, B, C, D, E) zwingend folgende Struktur eingehalten werden:
-1. <Anomalie-Check>: Fällt diese Aussage unter eine der "FERNUNI-HAGEN ANOMALIEN"? (Ja/Nein).
-2. <Objekt-Rollen-Check>: Welche Rolle spielen die Objekte im Text? (Input/Verbrauchsfaktor, etc.?)
-3. <Eigene Herleitung>: Zeige nur mathematische Kernschritte.
-4. <Wörtliches Zitat>: (Zitiere den Fachbegriff EXAKT). 
-5. <Faktische Wahrheit>: (Maximal 1 kurzer Satz laut Skript).   
-6. <Zeichen-Abgleich>: Stimmt das wörtliche Zitat buchstabengetreu mit der Wahrheit überein?
-7. <Bewertung>: Wahr / Falsch
-8. <Begründung>: Kurzer Stichpunkt.
+Bevor das finale Ausgabeformat generiert wird, MUSS zwingend ein strukturierter Textabschnitt mit der Überschrift '### Prüfungsprotokoll' genutzt werden. Hierbei ist ABSOLUTER TELEGRAMMSTIL zwingend. In diesem Block muss für JEDE der fünf Optionen (A, B, C, D, E) zwingend folgende Struktur als saubere Markdown-Liste (ohne XML-Tags!) eingehalten werden:
+* **Option [Buchstabe]:**
+  * **Anomalie-Check:** Fällt diese Aussage unter eine der "FERNUNI-HAGEN ANOMALIEN"? (Ja/Nein).
+  * **Objekt-Rollen-Check:** Welche Rolle spielen die Objekte im Text? (Input/Verbrauchsfaktor, etc.?)
+  * **Eigene Herleitung:** Zeige nur mathematische Kernschritte.
+  * **Wörtliches Zitat der Option:** (Zitiere den Fachbegriff EXAKT). 
+  * **Faktische Wahrheit:** (Maximal 1 kurzer Satz laut Skript).   
+  * **Zeichen-Abgleich:** Stimmt das wörtliche Zitat buchstabengetreu mit der Wahrheit überein?
+  * **Bewertung:** Wahr / Falsch
+  * **Begründung:** Kurzer Stichpunkt.
 
 f) Strikter Zeichenabgleich bei mathematischen Termen (Anti-Hineininterpretations-Regel): Wenn eine Antwortoption eine mathematische Formel oder einen Term enthält, musst du die Formel im ersten Schritt völlig unabhängig herleiten. Im zweiten Schritt musst du dein Ergebnis ZEICHEN FÜR ZEICHEN mit dem Text in der Option abgleichen. Beispiel: Wenn deine Herleitung 11,5x+511,5x+5 ergibt, in der Option aber 11,5x+5x11,5x+5x steht, ist die Option ZWINGEND FALSCH. Du darfst NIEMALS annehmen, dass es sich um einen "Tippfehler" in der Klausur handelt. Du darfst NIEMALS eine falsche Formel in der Option als "Wahr" bewerten, nur weil dein eigener Rechenweg richtig war. Strikter Zeichenabgleich bei Fachbegriffen (Anti-Auto-Korrektur-Regel): Wenn eine Option einen Fachbegriff enthält, musst du diesen BUCHSTABENGETREU lesen. Du darfst niemals einen falschen Begriff (z.B. 'Gebrauchsfaktor') zu dem richtigen Begriff (z.B. 'Verbrauchsfaktor') korrigieren. ACHTUNG: Diese Zeichen-für-Zeichen-Regel gilt AUSSCHLIESSLICH für mathematische Formeln und die exakte Nomenklatur von Fachbegriffen (z.B. Verbrauchsfaktor vs. Gebrauchsfaktor). Sie gilt AUSDRÜCKLICH NICHT für Füllwörter, Artikel (der/die/das) oder allgemeine Nomen (z.B. Zigarrenkiste). Ein Grammatikfehler in einem Nicht-Fachbegriff macht eine Option niemals falsch!
 
@@ -177,11 +180,9 @@ Verstoße NIEMALS gegen dieses Format!"""
                 parts.append(types.Part.from_bytes(data=pdf_data, mime_type="application/pdf"))
                 pdf.seek(0)
         
-        if images:
-            for image in images:
-                img_byte_arr = io.BytesIO()
-                image.save(img_byte_arr, format='JPEG')
-                parts.append(types.Part.from_bytes(data=img_byte_arr.getvalue(), mime_type="image/jpeg"))    
+        img_byte_arr = io.BytesIO()
+        image.save(img_byte_arr, format='JPEG')
+        parts.append(types.Part.from_bytes(data=img_byte_arr.getvalue(), mime_type="image/jpeg"))    
         
         parts.append("Löse ALLE Aufgaben auf dem Bild unter strikter Einhaltung deines Lösungsprozesses")
 
@@ -203,52 +204,45 @@ Verstoße NIEMALS gegen dieses Format!"""
     except Exception as e:
         return f"Fehler: {str(e)}"
 
-
 col1, col2 = st.columns([1, 1.2])
 
 with col1:
-    uploaded_files = st.file_uploader("Klausurblätter hochladen...", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
-    
-    processed_images = []
-    if uploaded_files:
-        if st.button("🔄 Alle Bilder 90° drehen"):
+    uploaded_file = st.file_uploader("Klausurblatt hochladen...", type=["png", "jpg", "jpeg"])
+    if uploaded_file:
+        img = Image.open(uploaded_file).convert('RGB')
+        if "rot" not in st.session_state: st.session_state.rot = 0
+        if st.button("🔄 Bild drehen"):
             st.session_state.rot = (st.session_state.rot + 90) % 360
             st.rerun()
-            
-        for file in uploaded_files:
-            img = Image.open(file).convert('RGB')
-            img = img.rotate(-st.session_state.rot, expand=True)
-            processed_images.append(img)
-            st.image(img)
+        img = img.rotate(-st.session_state.rot, expand=True)
+        st.image(img)
 
 with col2:
     st.subheader("Analyse & Chat")
     
-    if uploaded_files:
-        if st.button("⚡ Aufgaben lösen (Chatverlauf auto-clear)", type="primary", use_container_width=True):
+    if uploaded_file:
+        if st.button("Aufgaben lösen (Chatverlauf auto-clear)", type="primary", use_container_width=True):
             st.session_state.messages = []
             
             auto_prompt = "Löse alle Aufgaben auf dem hochgeladenen Bild nach deinen strikten Vorgaben."
             st.session_state.messages.append({"role": "user", "content": auto_prompt})
             
             with st.spinner("Gemini analysiert die Klausur initial..."):
-                answer = solve_everything(processed_images, pdfs, auto_prompt)
+                answer = solve_everything(img, pdfs, auto_prompt)
                 st.session_state.messages.append({"role": "assistant", "content": answer})
             
             st.rerun()
-
+    
     chat_container = st.container(height=600)
     with chat_container:
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
-# --- 7. OPTIONALER CHAT MIT VOLLEM KONTEXT-GEDÄCHTNIS ---
-if prompt := st.chat_input("Löse die Aufgaben oder gib mir eine Korrektur-Anweisung..."):
-    if not uploaded_files:
+if prompt := st.chat_input("Chat"):
+    if not uploaded_file:
         st.warning("Bitte lade zuerst ein Klausurblatt hoch!")
     else:
-        # User-Nachricht anhängen (ohne den bisherigen Verlauf zu löschen!)
         st.session_state.messages.append({"role": "user", "content": prompt})
         with col2:
              with chat_container:
@@ -257,6 +251,6 @@ if prompt := st.chat_input("Löse die Aufgaben oder gib mir eine Korrektur-Anwei
         
         with st.chat_message("assistant"):
                 with st.spinner("Gemini antwortet..."):
-                    answer = solve_everything(processed_images, pdfs, prompt)
+                    answer = solve_everything(img, pdfs, prompt)
                     st.markdown(answer)
                     st.session_state.messages.append({"role": "assistant", "content": answer})
